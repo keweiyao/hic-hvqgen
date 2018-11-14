@@ -1,0 +1,14 @@
+nevents = 3
+proj = Pb
+targ = Pb
+NPythiaEvents = 2000
+sqrts = 5020
+trento-args = --b-min=12.0 --b-max=12.5 -x 7.0 -n 18.4 -p 0.0 -k 1.2 -w 0.6 --ncoll
+tau-fs = 1.2
+xi-fs = 0.5
+hydro-args = stop=0.153 min=0.08 slope=1.1 curvature=-0.5 zetas_max=0.05 zetas_width=0.02 zetas_t0=0.180 iskip_t=1 iskip_xy=2
+Tswitch = 0.154
+mu = 1.0
+A = 0.64
+B = 0.0
+afix = -1.0

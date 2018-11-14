@@ -1,0 +1,28 @@
+[submodule "models/Duke-Lido"]
+	path = models/Duke-Lido
+	url = https://github.com/keweiyao/Duke-Lido
+	branch = test
+[submodule "models/trento"]
+	path = models/trento
+	url = https://github.com/keweiyao/trento3d
+	branch = Ncoll-density
+[submodule "models/freestream"]
+	path = models/freestream
+	url = https://github.com/Duke-QCD/freestream
+[submodule "models/osu-hydro"]
+	path = models/osu-hydro
+	url = https://github.com/keweiyao/vishnew
+	branch = hydro_profile
+[submodule "models/frzout"]
+	path = models/frzout
+	url = https://github.com/keweiyao/frzout/
+[submodule "models/hvq-hadronization"]
+	path = models/hvq-hadronization
+	url = https://github.com/keweiyao/hvq-hadronization
+[submodule "models/afterburner"]
+	path = models/afterburner
+	url = https://github.com/keweiyao/urqmd-afterburner/
+	branch = HQ-oversampled
+[submodule "models/JetCalc"]
+	path = models/JetCalc
+	url = https://github.com/keweiyao/JetCalc
