@@ -1,29 +1,29 @@
-duke heavy quark project
-==========================
+Duke coupled heavy-ion collision bulk and heavy-flavor event generator (hic-hvqgen)
+===================================================================================
 
 An ebe package for local tests.
 
 Requirements:
 
+  Pythia8230 installed in system
+
   cmake2.8+
   
   FORTRAN
 
-  c++11, boost lib and hdf5 lib
+  c++11, boost, hdf5, gsl
 
-  python3, h5py lib and Cython installed
+  python3 with h5py package
 
-First TRENTo generates the xy-IC for both hard (T_AA) and soft (T_R) event.
-The pT distribution may be reweighted as FONLL+EPS09nlo.
 
-For the medium evolution, use Jonah's hic-ebe package:
-https://github.com/jbernhard/heavy-ion-collisions-osg
+For the medium evolution, use the Duke hic-eventgen package:
+https://github.com/Duke-QCD/hic-eventgen
 
-   + TRENTo + freestream + Vishnew + frzout + UrQMD
+   TRENTo + freestream + (2+1D)osu-hydro + frzout + UrQMD
 
-With the trento IC and hydro evolution history, run heavy quark evolution:
+The coupling of heavy-flavor:
 
-   + TRENTo/FONLL + linear boltzmann / Langevin + frag&Recomb
+   TRENTo/Pythia + Duke Lido model + frag & Recomb + UrQMD
 
 To build packages into run/
 
@@ -37,16 +37,4 @@ Then go to run/ and run event
   
   cd run
   ./job-wrapper inputfile
-
-+ Initial Condition File: initial.hdf
-+ Hydro history and hypersurface: JetData.h5 and surface.dat
-+ Final state heavy quark data: hvq-final.dat (OSCAR1997A)
-+ Final state heavy meson data: h-meson-final.dat (OSCAR1997A)
-+ Final state light hadron data: particles_out.dat
-
-For the usage of the heavy quark module, currently please checkout
-
-.. code::
-
-  models/run-hvq-events
 
