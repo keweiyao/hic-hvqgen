@@ -672,7 +672,10 @@ def run_events(args, results_file, particles_file=None, checkpoint_ic=None):
 		subprocess.run("hvq-hadronization", stdin=open("{}-quark-frzout.dat".format(hq)))
 
 		# ==================Heavy + Soft --> UrQMD===========================
-		run_cmd('run-urqmd {}'.format(nsamples) )
+		#run_cmd('run-urqmd {}'.format(nsamples) )
+		run_cmd('convert_format {} particles_in.dat c-meson-frzout.dat'.format(nsamples))
+		#run_cmd('cp particles_in.dat urqmd.conf /global/homes/w/wk42/cori/hic-hvqgen/nersc/test/')
+		run_cmd('run_urqmd urqmd_input.dat particles_out.dat')	
 
 		# read final particle data
 		ID, charge, fmass, px, py, pz, y, eta, pT0, y0, w, _ = (

@@ -1,0 +1,9 @@
+#!/bin/sh
+
+module load boost/1.67.0 gsl cray-hdf5
+
+export CONDA_PREFIX=/global/common/software/m2730/wk42/hic-hvqgen
+export PATH=$CONDA_PREFIX/bin:$PATH
+export XDG_DATA_HOME=$CONDA_PREFIX/share
+
+run.py @$1 $2

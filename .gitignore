@@ -1,4 +1,2 @@
 *build/
-run/*
-!run/inputfile
-!run/job-wrapper
+nersc/examples
