@@ -1,2 +1,4 @@
 *build/
 nersc/examples
+nersc/production
+nersc/test

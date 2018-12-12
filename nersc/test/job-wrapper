@@ -6,4 +6,7 @@ export CONDA_PREFIX=/global/common/software/m2730/wk42/hic-hvqgen
 export PATH=$CONDA_PREFIX/bin:$PATH
 export XDG_DATA_HOME=$CONDA_PREFIX/share
 
-run.py @$1 $2
+run.py  \
+  --table-path $CSCRATCH/hic-hvqgen/tables-2018-12-04/main/table-00.h5 \
+  @$CSCRATCH/hic-hvqgen/inputdir-2018-12-04/main/Pb-Pb-5020/00 $1
+

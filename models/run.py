@@ -38,7 +38,7 @@ def run_cmd(*args):
 			stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
 			universal_newlines=True
 		)
-		print(proc.stdout)
+		print(proc.stderr)
 	except subprocess.CalledProcessError as e:
 		logging.error(
 			'command failed with status %d:\n%s',
@@ -214,7 +214,7 @@ parser.add_argument(
 	help='particlization temperature [GeV] (default: %(default).3f GeV)'
 )
 parser.add_argument(
-	'--NPythiaEvents', type=int, default=100000, metavar='INT',
+	'--NPythiaEvents', type=int, default=50000, metavar='INT',
 	help='number of pythia events'
 )
 parser.add_argument(
@@ -222,20 +222,8 @@ parser.add_argument(
 	help='center-of-mass energy'
 )
 parser.add_argument(
-	'--A', type=float, default=1.0, metavar='FLOAT',
-	help='diffusion parameter #1'
-)
-parser.add_argument(
-	'--B', type=float, default=0., metavar='FLOAT',
-	help='diffusion parameter #2'
-)
-parser.add_argument(
-	'--mu', type=float, default=1.0, metavar='FLOAT',
-	help='running coupling scale'
-)
-parser.add_argument(
-	'--afix', type=float, default=-1, metavar='FLOAT',
-	help='fixed coupling constant, -1 --> running'
+        '--table-path', type=os.path.abspath, metavar='PATH',
+        help='lido table path'
 )
 parser.add_argument(
 	'--proj', type=str, default="Pb", metavar='STR',
@@ -245,6 +233,11 @@ parser.add_argument(
 	'--targ', type=str, default="Pb", metavar='STR',
 	help='target'
 )
+parser.add_argument(
+        '--lido-args', default='', metavar='ARGS',
+        help='arguments passed to lido (default: empty)'
+)
+
 # pid and datatype
 species = {
 		'light':
@@ -271,7 +264,6 @@ complex_t = '<c16'
 result_dtype=[
 	########### Initial condition #####################
 	('initial_entropy', float_t),
-	('Npart', float_t),
 	('Ncoll', float_t),
 	########### Soft part #############################
 	('nsamples', int_t),
@@ -288,18 +280,18 @@ result_dtype=[
 						for (s, _) in species.get('heavy')]),	
 	('dX_dpT_dy_CMS', [(s, float_t, JEC['CMS']['Raa']['pTbins'].shape[0]) 
 						for (s, _) in species.get('heavy')]),		
-	('Qn_poi_pred', [(s, [('M', int_t, JEC['pred-pT'].shape[0]), 
+	('Qn_poi_pred', [(s, [('M', float_t, JEC['pred-pT'].shape[0]), 
 						 ('Qn', complex_t, [JEC['pred-pT'].shape[0], 4])] )
 						for (s, _) in species.get('heavy')]),	
-	('Qn_ref_pred', [('M', int_t), ('Qn', complex_t, 3)]),		
-	('Qn_poi_ALICE', [(s, [('M', int_t, JEC['ALICE']['vn_HF']['pTbins'].shape[0]), 
+	('Qn_ref_pred', [('M', float_t), ('Qn', complex_t, 4)]),		
+	('Qn_poi_ALICE', [(s, [('M', float_t, JEC['ALICE']['vn_HF']['pTbins'].shape[0]), 
 			('Qn', complex_t, [JEC['ALICE']['vn_HF']['pTbins'].shape[0], 4])] )
 						for (s, _) in species.get('heavy')]),	
-	('Qn_ref_ALICE', [('M', int_t), ('Qn', complex_t, 3)]),
-	('Qn_poi_CMS', [(s, [('M', int_t, JEC['CMS']['vn_HF']['pTbins'].shape[0]), 
+	('Qn_ref_ALICE', [('M', float_t), ('Qn', complex_t, 4)]),
+	('Qn_poi_CMS', [(s, [('M', float_t, JEC['CMS']['vn_HF']['pTbins'].shape[0]), 
 			('Qn', complex_t, [JEC['CMS']['vn_HF']['pTbins'].shape[0], 4])] )
 						for (s, _) in species.get('heavy')]),	
-	('Qn_ref_CMS', [('M', int_t), ('Qn', complex_t, 3)]),
+	('Qn_ref_CMS', [('M', float_t), ('Qn', complex_t, 4)]),
 ]
 
 class StopEvent(Exception):
@@ -602,6 +594,66 @@ def run_events(args, results_file, particles_file=None, checkpoint_ic=None):
 
 	results = np.empty((), dtype=result_dtype)
 
+	def run_pp_event(ic, nb, event_number):
+		results.fill(0)
+		results['initial_entropy'] = ic.sum() * grid_step**2
+		results['Ncoll'] = nb.sum() * grid_step**2
+		# Run Pythia+Lido
+		prefix = os.environ.get('XDG_DATA_HOME')
+		cmd = "pythia-pp -y {:s}/pythia-pp-setting.txt -i initial.hdf -j {:d} -n {:d}"
+		run_cmd(cmd.format(prefix, 0 if args.nevents is None else event_number-1, args.NPythiaEvents))
+		# hadronization
+		hq = 'c'
+		prefix = os.environ.get('XDG_DATA_HOME')+"/hvq-hadronization/"
+		os.environ["ftn20"] = "{}-meson-frzout.dat".format(hq)
+		os.environ["ftn30"] = prefix+"parameters_{}_hd.dat".format(hq)
+		os.environ["ftn40"] = prefix+"recomb_{}_tot.dat".format(hq)
+		os.environ["ftn50"] = prefix+"recomb_{}_BR1.dat".format(hq)
+		logging.info(os.environ["ftn30"])
+		subprocess.run("hvq-hadronization", stdin=open("{}-quark-frzout.dat".format(hq)))
+		cmd = "sed -i -e 's/D/E/g' {}-meson-frzout.dat".format(hq)
+		subprocess.run(cmd, shell=True)
+		index, pid, px, py, pz, E, mass, x, y, z, t, T, vx, vy, vz, p0x, p0y, p0z, E0, w, _ \
+			= np.loadtxt("{}-meson-frzout.dat".format(hq), skiprows=4).T
+		abs_ID = np.abs(pid)
+		pT = np.sqrt(px**2+py**2)
+		pabs = np.sqrt(pT**2 + pz**2)
+		y = .5*np.log((pabs+pz)/(pabs-pz))
+		phi = np.arctan2(py, px)
+		heavy_pid = [411, 421, 413, 423]
+		is_heavy = np.array([u in heavy_pid for u in abs_ID], dtype=bool)
+
+		#============for heavy flavors=======================
+		for exp in ['ALICE', 'CMS']:
+			#===========For heavy particles======================
+			# For charmed hadrons, use info after urqmd
+			HF_dict = { 'pid': abs_ID[is_heavy],
+                                                'pT' : pT[is_heavy],
+                                                'y'  : y[is_heavy],
+                                                'phi': phi[is_heavy],
+                                                'w' : w[is_heavy] # normalized to an area units
+				}
+			POI = heavy_pid
+			Yield = JLP.Yield(HF_dict, JEC[exp]['Raa']['pTbins'],
+                                                                JEC[exp]['Raa']['ybins'], POI)
+			for s, pid in zip(['D+','D0','D*+', 'D0*'], [411, 421, 413, 423]):
+				results['dX_dpT_dy_'+exp][s] = Yield[pid][:,0]
+
+                #===========For full-pT prediction======================
+		HF_dict = { 'pid': abs_ID[is_heavy],
+                                        'pT' : pT[is_heavy],
+                                        'y'  : y[is_heavy],
+                                        'phi': phi[is_heavy],
+                                        'w' : w[is_heavy]
+                                }
+		POI = heavy_pid
+		Yield = JLP.Yield(HF_dict, JEC['pred-pT'], [[-1,1]], POI)
+		for s, pid in zip(['D+','D0','D*+', 'D0*'], [411, 421, 413, 423]):
+			results['dX_dpT_dy_pred'][s] = Yield[pid][:,0]
+
+
+
+
 	def run_single_event(ic, nb, event_number):
 		"""
 		Run the initial condition event contained in HDF5 dataset object `ic`
@@ -633,7 +685,7 @@ def run_events(args, results_file, particles_file=None, checkpoint_ic=None):
 
 		# Sampling particle for UrQMD events
 		logging.info('sampling surface with frzout')
-		minsamples, maxsamples = 1, 10  # reasonable range for nsamples
+		minsamples, maxsamples = 10, 400  # reasonable range for nsamples
 		minparts = 10**5  # min number of particles to sample
 		nparts = 0  # for tracking total number of sampled particles
 		with open('particles_in.dat', 'w') as f:
@@ -657,9 +709,17 @@ def run_events(args, results_file, particles_file=None, checkpoint_ic=None):
 		# ==================Heavy Flavor===========================
 		# Run Pythia+Lido
 		prefix = os.environ.get('XDG_DATA_HOME')
-		cmd = "hydro-couple {:s}/pythia-setting.txt initial.hdf {:d} JetData.h5 {:s}/settings.xml {:d} {:f} {:f} {:f} {:f}"
-		run_cmd(cmd.format(prefix, event_number-1, prefix, args.NPythiaEvents,
-						   1.0, -1, 0.6, 0.0))
+		run_cmd(
+                        'hydro-couple',
+                        '-y {:s}/pythia-setting.txt'.format(prefix),
+                        '-i ./initial.hdf',
+                        '-j {:d}'.format(0 if args.nevents is None else event_number-1),
+                        '--hydro ./JetData.h5',
+                        '-s {:s}/settings.xml'.format(prefix),
+                        '-t {:s}'.format(args.table_path),
+                        '-n {:d}'.format(args.NPythiaEvents),
+                        args.lido_args,
+                )
 
 		# hadronization
 		hq = 'c'
@@ -672,9 +732,7 @@ def run_events(args, results_file, particles_file=None, checkpoint_ic=None):
 		subprocess.run("hvq-hadronization", stdin=open("{}-quark-frzout.dat".format(hq)))
 
 		# ==================Heavy + Soft --> UrQMD===========================
-		#run_cmd('run-urqmd {}'.format(nsamples) )
 		run_cmd('convert_format {} particles_in.dat c-meson-frzout.dat'.format(nsamples))
-		#run_cmd('cp particles_in.dat urqmd.conf /global/homes/w/wk42/cori/hic-hvqgen/nersc/test/')
 		run_cmd('run_urqmd urqmd_input.dat particles_out.dat')	
 
 		# read final particle data
@@ -688,6 +746,7 @@ def run_events(args, results_file, particles_file=None, checkpoint_ic=None):
 		# pT, phi, and id cut
 		pT = np.sqrt(px**2+py**2)
 		phi = np.arctan2(py, px)
+		ET = fmass**2 + pT**2
 		charged = (charge != 0)
 		abs_eta = np.fabs(eta)
 		abs_ID = np.abs(ID)
@@ -698,9 +757,28 @@ def run_events(args, results_file, particles_file=None, checkpoint_ic=None):
 		is_light = np.logical_not(is_heavy)
 
 		#============for soft particles======================
-		results['dNch_deta'] = \
-					np.count_nonzero(charged & (abs_eta<.5) & is_light) / nsamples
+		results['dNch_deta'] = np.count_nonzero(charged & (abs_eta<.5) & is_light) / nsamples
+		ET_eta = .6
+		results['dET_deta'] = ET[abs_eta < ET_eta].sum() / (2*ET_eta) / nsamples
 
+
+		for s, pid in species.get('light'):
+			cut = (abs_ID == pid) & (abs_eta < 0.5)
+			N = np.count_nonzero(cut)
+			results['dN_dy'][s] = N / nsamples
+			results['mean_pT'][s] = (0. if N == 0 else pT[cut].mean())
+
+		pT_alice = pT[charged & (abs_eta < .8) & (.15 < pT) & (pT < 2.)]
+		results['pT_fluct']['N'] = pT_alice.size
+		results['pT_fluct']['sum_pT'] = pT_alice.sum()
+		results['pT_fluct']['sum_pTsq'] = np.inner(pT_alice, pT_alice)
+
+		phi_alice = phi[charged & (abs_eta < .8) & (.2 < pT) & (pT < 5.)]
+		results['Qn_soft']['M'] = phi_alice.size
+		results['Qn_soft']['Qn'] = [np.exp(1j*n*phi_alice).sum()
+				for n in range(1, results.dtype['Qn_soft']['Qn'].shape[0] + 1)]
+
+		#============for heavy flavors=======================
 		for exp in ['ALICE', 'CMS']:
 			#=========Event plane Q-vector from UrQMD events======================
 			phi_light = phi[charged & is_light \
@@ -710,7 +788,7 @@ def run_events(args, results_file, particles_file=None, checkpoint_ic=None):
 				& (pT < JEC[exp]['vn_ref']['pTbins'][1])]
 			results['Qn_ref_'+exp]['M'] = phi_light.shape[0]
 			results['Qn_ref_'+exp]['Qn'] = np.array([np.exp(1j*n*phi_light).sum() 
-											for n in range(1, 4)])
+											for n in range(1, 5)])
 			#===========For heavy particles======================
 			# For charmed hadrons, use info after urqmd
 			HF_dict = { 'pid': abs_ID[is_heavy],
@@ -742,7 +820,7 @@ def run_events(args, results_file, particles_file=None, checkpoint_ic=None):
 			ophi_light = np.append(ophi_light, ophi)
 		results['Qn_ref_pred']['M'] = ophi_light.shape[0]
 		results['Qn_ref_pred']['Qn'] = np.array([np.exp(1j*n*ophi_light).sum() 
-											for n in range(1, 4)])
+							 for n in range(1, 5)])
 		del ophi_light
 		#===========For heavy particles======================
 		# For charmed hadrons, use info after urqmd
@@ -759,7 +837,6 @@ def run_events(args, results_file, particles_file=None, checkpoint_ic=None):
 			results['dX_dpT_dy_pred'][s] = Yield[pid][:,0]
 			results['Qn_poi_pred'][s]['M'] = flow[pid]['M'][:,0]
 			results['Qn_poi_pred'][s]['Qn'] = flow[pid]['Qn'][:,0]
-		POI = [pid for (_, pid) in species.get('heavy')]
 		#^^^^^^end of run_single_event(...)^^^^^^^^^^^^^^^^^^ 
 	nfail = 0
 
@@ -768,7 +845,10 @@ def run_events(args, results_file, particles_file=None, checkpoint_ic=None):
 		logging.info('starting event %d', n)
 
 		try:
-			run_single_event(ic, nb, n)
+			if args.proj == 'p' and args.targ == 'p':
+				run_pp_event(ic, nb, n)
+			else:
+				run_single_event(ic, nb, n)
 		except StopEvent as e:
 			if particles_file is not None:
 				particles_file.create_dataset(
