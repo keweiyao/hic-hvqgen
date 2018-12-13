@@ -7,6 +7,6 @@ export PATH=$CONDA_PREFIX/bin:$PATH
 export XDG_DATA_HOME=$CONDA_PREFIX/share
 
 run.py  \
-  --table-path $CSCRATCH/hic-hvqgen/tables-2018-12-04/main/table-00.h5 \
-  @$CSCRATCH/hic-hvqgen/inputdir-2018-12-04/main/Pb-Pb-5020/00 $1
+  --table-path $CSCRATCH/hic-hvqgen/tables-2018-12-04/main/table-55.h5 \
+  @$CSCRATCH/hic-hvqgen/inputdir-2018-12-04/main/Pb-Pb-5020/55 $1
 
